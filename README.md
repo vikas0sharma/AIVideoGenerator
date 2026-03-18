@@ -5,6 +5,10 @@ An AI-powered short video generator built with **.NET 10** and the **Microsoft A
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+<img width="1886" height="905" alt="Image" src="https://github.com/user-attachments/assets/61dc702a-5b13-44d0-b153-1f13e7e012bc" />
+
+<img width="1891" height="924" alt="Image" src="https://github.com/user-attachments/assets/c8f8951b-3f50-4ddb-bd9f-460fe66cb157" />
+
 ## Features ✨
 
 - **End-to-end automation** – from topic to finished video in a single API call
