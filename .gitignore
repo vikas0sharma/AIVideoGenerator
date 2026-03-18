@@ -176,6 +176,9 @@ DocProject/Help/*.hhp
 DocProject/Help/Html2
 DocProject/Help/html
 
+#Created Videos
+AIVideoGenerator/storage/
+
 # Click-Once directory
 publish/
 
