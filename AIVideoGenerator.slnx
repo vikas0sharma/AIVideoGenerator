@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="AIVideoGenerator.Core/AIVideoGenerator.Core.csproj" />
+  <Project Path="AIVideoGenerator/AIVideoGenerator.csproj" />
+</Solution>

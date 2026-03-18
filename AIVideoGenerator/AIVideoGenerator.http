@@ -1,0 +1,6 @@
+@AIVideoGenerator_HostAddress = http://localhost:5005
+
+GET {{AIVideoGenerator_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
