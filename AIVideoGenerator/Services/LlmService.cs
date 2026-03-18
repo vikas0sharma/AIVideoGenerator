@@ -26,7 +26,7 @@ namespace AIVideoGenerator.Services
                 Generate a video script about the topic: "{subject}".
                 The script should be written in {lang}.
                 Generate exactly {paragraphCount} paragraph(s).
-                Each paragraph should be 7-8 sentences suitable for narration in a short video.
+                Each paragraph should be 4-5 sentences suitable for narration in a short video.
                 Output ONLY the script text, one paragraph per line. No titles, numbers, or formatting.
                 """;
 
