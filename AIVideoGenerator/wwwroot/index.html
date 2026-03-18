@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Video Generator</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #242836;
+            --border: #2e3347;
+            --text: #e4e6f0;
+            --text-dim: #8b8fa3;
+            --accent: #6c63ff;
+            --accent-hover: #7f78ff;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        header h1 { font-size: 1.4rem; font-weight: 600; }
+        header p { color: var(--text-dim); font-size: .85rem; }
+
+        main {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 0;
+            min-height: calc(100vh - 60px);
+        }
+
+        /* ─── Settings Panel ─── */
+        .settings {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+        }
+
+        .section { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .section-header {
+            background: var(--surface2);
+            padding: .65rem 1rem;
+            cursor: pointer;
+            user-select: none;
+            font-weight: 600;
+            font-size: .85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header::after { content: '▾'; font-size: .75rem; color: var(--text-dim); transition: transform .2s; }
+        .section.collapsed .section-header::after { transform: rotate(-90deg); }
+        .section.collapsed .section-body { display: none; }
+        .section-body { padding: .85rem 1rem; display: flex; flex-direction: column; gap: .6rem; }
+
+        label { font-size: .78rem; color: var(--text-dim); display: block; margin-bottom: .2rem; }
+
+        input[type="text"], input[type="number"], textarea, select {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: .5rem .65rem;
+            color: var(--text);
+            font-size: .85rem;
+            outline: none;
+            transition: border-color .15s;
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+        textarea { resize: vertical; min-height: 60px; }
+
+        input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+        input[type="color"] {
+            width: 36px; height: 28px; border: 1px solid var(--border);
+            border-radius: 4px; padding: 0; cursor: pointer; background: transparent;
+        }
+
+        .row { display: flex; gap: .65rem; align-items: flex-end; }
+        .row > * { flex: 1; }
+
+        .range-group { display: flex; align-items: center; gap: .5rem; }
+        .range-group input[type="range"] { flex: 1; }
+        .range-val { font-size: .78rem; min-width: 2.5rem; text-align: right; color: var(--text-dim); }
+
+        .checkbox-row { display: flex; align-items: center; gap: .5rem; }
+        .checkbox-row input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+        .checkbox-row label { margin: 0; color: var(--text); font-size: .85rem; }
+
+        /* ─── Generate Button ─── */
+        .btn-generate {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: .75rem;
+            font-size: .95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s;
+            width: 100%;
+            margin-top: .5rem;
+        }
+        .btn-generate:hover { background: var(--accent-hover); }
+        .btn-generate:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* ─── Preview Panel ─── */
+        .preview {
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 1.5rem;
+        }
+
+        .preview-placeholder {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 4rem 2rem;
+            text-align: center;
+            color: var(--text-dim);
+            width: 100%;
+            max-width: 720px;
+        }
+
+        /* ─── Progress ─── */
+        .progress-container {
+            width: 100%;
+            max-width: 720px;
+        }
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+        .step {
+            display: flex;
+            align-items: center;
+            gap: .65rem;
+            padding: .5rem .75rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: .85rem;
+        }
+        .step .dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--border);
+            flex-shrink: 0;
+        }
+        .step.active .dot { background: var(--warning); animation: pulse 1s infinite; }
+        .step.done .dot { background: var(--success); }
+        .step.error .dot { background: var(--danger); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .4; }
+        }
+
+        /* ─── Video Player ─── */
+        .video-result {
+            width: 100%;
+            max-width: 720px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+        .video-result video {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #000;
+        }
+        .btn-download {
+            background: var(--surface2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: .55rem 1.5rem;
+            font-size: .85rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background .15s;
+        }
+        .btn-download:hover { background: var(--border); }
+
+        .error-msg {
+            background: rgba(239,68,68,.12);
+            border: 1px solid var(--danger);
+            border-radius: 8px;
+            padding: .75rem 1rem;
+            color: var(--danger);
+            font-size: .85rem;
+            max-width: 720px;
+            width: 100%;
+        }
+
+        @media (max-width: 860px) {
+            main { grid-template-columns: 1fr; }
+            .settings { border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎬 AI Video Generator</h1>
+        <p>Generate short videos from a topic using AI</p>
+    </header>
+
+    <main>
+        <!-- ─── Settings ─── -->
+        <div class="settings">
+            <!-- Basic -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">Basic Settings</div>
+                <div class="section-body">
+                    <div>
+                        <label for="videoSubject">Video Subject / Topic *</label>
+                        <input type="text" id="videoSubject" placeholder="e.g. How to stay productive" />
+                    </div>
+                    <div>
+                        <label for="videoScript">Custom Script (optional)</label>
+                        <textarea id="videoScript" rows="3" placeholder="Leave empty to auto-generate with AI"></textarea>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label for="videoLanguage">Language</label>
+                            <select id="videoLanguage">
+                                <option value="en">English</option>
+                                <option value="zh">Chinese</option>
+                                <option value="es">Spanish</option>
+                                <option value="fr">French</option>
+                                <option value="de">German</option>
+                                <option value="ja">Japanese</option>
+                                <option value="ko">Korean</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="paragraphNumber">Paragraphs</label>
+                            <input type="number" id="paragraphNumber" value="1" min="1" max="5" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">Video Settings</div>
+                <div class="section-body">
+                    <div class="row">
+                        <div>
+                            <label for="videoAspect">Aspect Ratio</label>
+                            <select id="videoAspect">
+                                <option value="0">Portrait 9:16</option>
+                                <option value="1">Landscape 16:9</option>
+                                <option value="2">Square 1:1</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="videoClipDuration">Clip Duration (s)</label>
+                            <input type="number" id="videoClipDuration" value="5" min="2" max="15" />
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label for="videoConcatMode">Concat Mode</label>
+                            <select id="videoConcatMode">
+                                <option value="0">Random</option>
+                                <option value="1">Sequential</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="videoTransitionMode">Transition</label>
+                            <select id="videoTransitionMode">
+                                <option value="0">None</option>
+                                <option value="1">Shuffle</option>
+                                <option value="2">Fade In</option>
+                                <option value="3">Fade Out (Black)</option>
+                                <option value="4">Slide In</option>
+                                <option value="5">Slide Out</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="videoCount">Number of Videos</label>
+                        <input type="number" id="videoCount" value="1" min="1" max="5" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Voice -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">Voice / TTS</div>
+                <div class="section-body">
+                    <div>
+                        <label for="voiceName">Voice Name</label>
+                        <select id="voiceName">
+                            <option value="en-US-AriaNeural">en-US Aria (Female)</option>
+                            <option value="en-US-GuyNeural">en-US Guy (Male)</option>
+                            <option value="en-US-JennyNeural">en-US Jenny (Female)</option>
+                            <option value="en-US-ChristopherNeural">en-US Christopher (Male)</option>
+                            <option value="en-GB-SoniaNeural">en-GB Sonia (Female)</option>
+                            <option value="en-GB-RyanNeural">en-GB Ryan (Male)</option>
+                            <option value="zh-CN-XiaoxiaoNeural">zh-CN Xiaoxiao (Female)</option>
+                            <option value="zh-CN-YunxiNeural">zh-CN Yunxi (Male)</option>
+                            <option value="es-ES-ElviraNeural">es-ES Elvira (Female)</option>
+                            <option value="fr-FR-DeniseNeural">fr-FR Denise (Female)</option>
+                            <option value="de-DE-KatjaNeural">de-DE Katja (Female)</option>
+                            <option value="ja-JP-NanamiNeural">ja-JP Nanami (Female)</option>
+                            <option value="ko-KR-SunHiNeural">ko-KR SunHi (Female)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Voice Volume</label>
+                        <div class="range-group">
+                            <input type="range" id="voiceVolume" min="0" max="2" step="0.1" value="1.0"
+                                   oninput="document.getElementById('voiceVolumeVal').textContent=this.value" />
+                            <span class="range-val" id="voiceVolumeVal">1.0</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label>Voice Rate</label>
+                        <div class="range-group">
+                            <input type="range" id="voiceRate" min="0.5" max="2" step="0.1" value="1.0"
+                                   oninput="document.getElementById('voiceRateVal').textContent=this.value" />
+                            <span class="range-val" id="voiceRateVal">1.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BGM -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">Background Music</div>
+                <div class="section-body">
+                    <div>
+                        <label for="bgmType">BGM Type</label>
+                        <select id="bgmType">
+                            <option value="random">Random</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>BGM Volume</label>
+                        <div class="range-group">
+                            <input type="range" id="bgmVolume" min="0" max="1" step="0.05" value="0.2"
+                                   oninput="document.getElementById('bgmVolumeVal').textContent=this.value" />
+                            <span class="range-val" id="bgmVolumeVal">0.2</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subtitles -->
+            <div class="section">
+                <div class="section-header" onclick="toggleSection(this)">Subtitles</div>
+                <div class="section-body">
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="subtitleEnabled" checked />
+                        <label for="subtitleEnabled">Enable Subtitles</label>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label for="subtitlePosition">Position</label>
+                            <select id="subtitlePosition">
+                                <option value="bottom">Bottom</option>
+                                <option value="top">Top</option>
+                                <option value="center">Center</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fontSize">Font Size</label>
+                            <input type="number" id="fontSize" value="60" min="16" max="120" />
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label for="textForeColor">Text Color</label>
+                            <input type="color" id="textForeColor" value="#FFFFFF" />
+                        </div>
+                        <div>
+                            <label for="strokeColor">Stroke Color</label>
+                            <input type="color" id="strokeColor" value="#000000" />
+                        </div>
+                        <div>
+                            <label for="strokeWidth">Stroke Width</label>
+                            <input type="number" id="strokeWidth" value="1.5" min="0" max="5" step="0.5" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-generate" id="btnGenerate" onclick="startGeneration()">
+                🎬 Generate Video
+            </button>
+        </div>
+
+        <!-- ─── Preview ─── -->
+        <div class="preview" id="previewArea">
+            <div class="preview-placeholder" id="placeholder">
+                <p style="font-size:2.5rem;margin-bottom:.75rem;">🎥</p>
+                <p style="font-size:1rem;margin-bottom:.35rem;">Your video will appear here</p>
+                <p style="font-size:.8rem;">Fill in the settings and click <strong>Generate Video</strong></p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function toggleSection(header) {
+            header.parentElement.classList.toggle('collapsed');
+        }
+
+        const PIPELINE_STEPS = [
+            { id: 'ScriptGenerator', label: '📝 Generating script…' },
+            { id: 'TermsGenerator', label: '🔍 Extracting search terms…' },
+            { id: 'MaterialSearch', label: '🎞️ Searching stock footage…' },
+            { id: 'VideoDownloadWorker', label: '⬇️ Downloading materials…' },
+            { id: 'DownloadMerger', label: '📦 Merging downloads…' },
+            { id: 'AudioGenerator', label: '🔊 Generating voiceover…' },
+            { id: 'SubtitleGenerator', label: '💬 Creating subtitles…' },
+            { id: 'VideoComposer', label: '🎬 Composing final video…' },
+        ];
+
+        function buildParams() {
+            return {
+                video_subject: document.getElementById('videoSubject').value.trim(),
+                video_script: document.getElementById('videoScript').value.trim(),
+                video_language: document.getElementById('videoLanguage').value,
+                video_aspect: parseInt(document.getElementById('videoAspect').value),
+                video_concat_mode: parseInt(document.getElementById('videoConcatMode').value),
+                video_transition_mode: parseInt(document.getElementById('videoTransitionMode').value),
+                video_clip_duration: parseInt(document.getElementById('videoClipDuration').value),
+                video_count: parseInt(document.getElementById('videoCount').value),
+                paragraph_number: parseInt(document.getElementById('paragraphNumber').value),
+                voice_name: document.getElementById('voiceName').value,
+                voice_volume: parseFloat(document.getElementById('voiceVolume').value),
+                voice_rate: parseFloat(document.getElementById('voiceRate').value),
+                bgm_type: document.getElementById('bgmType').value,
+                bgm_volume: parseFloat(document.getElementById('bgmVolume').value),
+                subtitle_enabled: document.getElementById('subtitleEnabled').checked,
+                subtitle_position: document.getElementById('subtitlePosition').value,
+                font_size: parseInt(document.getElementById('fontSize').value),
+                text_fore_color: document.getElementById('textForeColor').value.toUpperCase(),
+                stroke_color: document.getElementById('strokeColor').value.toUpperCase(),
+                stroke_width: parseFloat(document.getElementById('strokeWidth').value),
+            };
+        }
+
+        function showProgress() {
+            const area = document.getElementById('previewArea');
+            area.innerHTML = `
+                <div class="progress-container">
+                    <h3 style="margin-bottom:1rem;font-size:1rem;">⏳ Generating video…</h3>
+                    <div class="progress-steps" id="progressSteps">
+                        ${PIPELINE_STEPS.map(s => `
+                            <div class="step" id="step-${s.id}">
+                                <span class="dot"></span>
+                                <span>${s.label}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+        }
+
+        function activateStep(executorId) {
+            // Mark all matching steps (some IDs partially match)
+            for (const s of PIPELINE_STEPS) {
+                const el = document.getElementById('step-' + s.id);
+                if (!el) continue;
+                if (executorId.includes(s.id)) {
+                    el.classList.add('active');
+                    el.classList.remove('done');
+                } else if (el.classList.contains('active')) {
+                    el.classList.remove('active');
+                    el.classList.add('done');
+                }
+            }
+        }
+
+        function markAllDone() {
+            for (const s of PIPELINE_STEPS) {
+                const el = document.getElementById('step-' + s.id);
+                if (el) { el.classList.remove('active'); el.classList.add('done'); }
+            }
+        }
+
+        function showVideo(taskId) {
+            const url = `/api/v1/video/tasks/${taskId}/video`;
+            const area = document.getElementById('previewArea');
+            area.innerHTML = `
+                <div class="video-result">
+                    <h3 style="font-size:1rem;color:var(--success);">✅ Video Generated Successfully</h3>
+                    <video controls autoplay src="${url}"></video>
+                    <a class="btn-download" href="${url}" download="video.mp4">⬇ Download Video</a>
+                </div>`;
+        }
+
+        function showError(msg) {
+            const area = document.getElementById('previewArea');
+            area.innerHTML += `<div class="error-msg">❌ ${msg}</div>`;
+        }
+
+        async function startGeneration() {
+            const params = buildParams();
+            if (!params.video_subject) {
+                alert('Please enter a video subject.');
+                return;
+            }
+
+            const btn = document.getElementById('btnGenerate');
+            btn.disabled = true;
+            showProgress();
+
+            let taskId = null;
+
+            try {
+                const response = await fetch('/api/v1/video/generate/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params),
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // keep incomplete line in buffer
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const evt = JSON.parse(line.substring(6));
+
+                            if (evt.type === 'TaskStarted') {
+                                taskId = evt.task_id;
+                            } else if (evt.type === 'TaskCompleted') {
+                                taskId = evt.task_id || taskId;
+                                markAllDone();
+                            } else if (evt.type === 'TaskFailed') {
+                                showError(evt.message || 'Generation failed');
+                            } else if (evt.executor) {
+                                activateStep(evt.executor);
+                            }
+                        } catch { /* skip malformed */ }
+                    }
+                }
+
+                if (taskId) {
+                    showVideo(taskId);
+                }
+            } catch (err) {
+                showError(err.message || 'Network error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

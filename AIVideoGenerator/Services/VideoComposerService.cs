@@ -22,6 +22,7 @@ namespace AIVideoGenerator.Services
         private readonly VideoGeneratorSettings _settings;
         private readonly ILogger<VideoComposerService> _logger;
         private const double BgmFadeOutSeconds = 3.0;
+        private const double TransitionDurationSeconds = 0.5;
 
         public VideoComposerService(IOptions<VideoGeneratorSettings> settings, ILogger<VideoComposerService> logger)
         {
@@ -98,17 +99,30 @@ namespace AIVideoGenerator.Services
                     }
                 }
 
-                // 4) Write concat list file
-                var concatList = Path.Combine(tempDir, "concat.txt");
-                await File.WriteAllLinesAsync(concatList, processedClips.Select(p => $"file '{Path.GetFullPath(p).Replace("'", "'\\''")}'"), ct);
-
-                // 5) Try concat copy via Xabe, fallback to re-encode concat
+                // 4) Merge clips — with transitions or simple concat
                 var mergedPath = Path.Combine(tempDir, "merged.mp4");
-                var ok = await TryConcatCopy_XabeAsync(concatList, mergedPath, project.TaskDir, ct);
-                if (!ok)
+
+                if (project.Params.VideoTransitionMode != VideoTransitionMode.None)
                 {
-                    _logger.LogInformation("Concat copy failed; performing re-encode concat");
-                    await ConcatReencode_XabeAsync(concatList, mergedPath, targetW, targetH, ct);
+                    var clipDurations = new List<double>();
+                    foreach (var clip in processedClips)
+                    {
+                        var info = await FFmpeg.GetMediaInfo(clip, ct);
+                        clipDurations.Add(info.Duration.TotalSeconds);
+                    }
+                    await MergeWithTransitions_XabeAsync(processedClips, clipDurations, project.Params.VideoTransitionMode, mergedPath, ct);
+                }
+                else
+                {
+                    var concatList = Path.Combine(tempDir, "concat.txt");
+                    await File.WriteAllLinesAsync(concatList, processedClips.Select(p => $"file '{Path.GetFullPath(p).Replace("'", "'\\''")}'"), ct);
+
+                    var ok = await TryConcatCopy_XabeAsync(concatList, mergedPath, project.TaskDir, ct);
+                    if (!ok)
+                    {
+                        _logger.LogInformation("Concat copy failed; performing re-encode concat");
+                        await ConcatReencode_XabeAsync(concatList, mergedPath, targetW, targetH, ct);
+                    }
                 }
 
                 // 6) Mix audio and attach to merged video
@@ -476,6 +490,85 @@ namespace AIVideoGenerator.Services
             {
                 // ignore
             }
+        }
+
+        private async Task MergeWithTransitions_XabeAsync(
+            List<string> clips,
+            List<double> durations,
+            VideoTransitionMode mode,
+            string outputPath,
+            CancellationToken ct)
+        {
+            if (clips.Count == 1)
+            {
+                File.Copy(clips[0], outputPath, true);
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("-y ");
+
+            for (int i = 0; i < clips.Count; i++)
+                sb.Append($"-i \"{EscapePath(clips[i])}\" ");
+
+            var filterParts = new List<string>();
+            var transitionNames = GetTransitionNames(mode, clips.Count - 1);
+
+            double cumulativeDuration = durations[0];
+            string prevLabel = "[0:v]";
+
+            for (int i = 1; i < clips.Count; i++)
+            {
+                double offset = Math.Max(0, cumulativeDuration - TransitionDurationSeconds);
+                string outLabel = i < clips.Count - 1 ? $"[v{i}]" : "[vout]";
+                string transition = transitionNames[i - 1];
+
+                filterParts.Add(
+                    $"{prevLabel}[{i}:v]xfade=transition={transition}" +
+                    $":duration={TransitionDurationSeconds.ToString(CultureInfo.InvariantCulture)}" +
+                    $":offset={offset.ToString(CultureInfo.InvariantCulture)}{outLabel}");
+
+                prevLabel = outLabel;
+                cumulativeDuration = offset + durations[i];
+            }
+
+            sb.Append($"-filter_complex \"{string.Join(";", filterParts)}\" ");
+            sb.Append("-map \"[vout]\" ");
+            sb.Append("-c:v libx264 -preset medium -crf 23 -an ");
+            sb.Append($"\"{EscapePath(outputPath)}\"");
+
+            var conversion = FFmpeg.Conversions.New();
+            conversion.AddParameter(sb.ToString());
+            conversion.SetOverwriteOutput(true);
+
+            conversion.OnProgress += (s, e) =>
+            {
+                _logger.LogDebug("Transition merge progress: {Percent}% Time:{Time}", e.Percent, e.Duration);
+            };
+
+            _logger.LogInformation("Merging {Count} clips with {Mode} transitions", clips.Count, mode);
+            await conversion.Start(ct);
+        }
+
+        private static List<string> GetTransitionNames(VideoTransitionMode mode, int count)
+        {
+            if (mode == VideoTransitionMode.Shuffle)
+            {
+                var options = new[] { "fade", "fadeblack", "fadewhite", "slideleft", "slideright", "wipeleft", "wiperight", "circleopen", "circleclose" };
+                var rnd = new Random();
+                return Enumerable.Range(0, count).Select(_ => options[rnd.Next(options.Length)]).ToList();
+            }
+
+            var name = mode switch
+            {
+                VideoTransitionMode.FadeIn => "fade",
+                VideoTransitionMode.FadeOut => "fadeblack",
+                VideoTransitionMode.SlideIn => "slideleft",
+                VideoTransitionMode.SlideOut => "slideright",
+                _ => "fade"
+            };
+
+            return Enumerable.Repeat(name, count).ToList();
         }
 
         private sealed class Subclip

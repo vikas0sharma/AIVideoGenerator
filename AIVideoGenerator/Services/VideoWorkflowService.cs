@@ -96,6 +96,17 @@ namespace AIVideoGenerator.Services
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             var project = new VideoProject { Params = videoParams };
+            await foreach (var evt in GenerateVideoStreamingAsync(project, ct))
+                yield return evt;
+        }
+
+        /// <summary>
+        /// Run the workflow with streaming events for a pre-created project (allows caller to know the TaskId).
+        /// </summary>
+        public async IAsyncEnumerable<WorkflowEvent> GenerateVideoStreamingAsync(
+            VideoProject project,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
             Directory.CreateDirectory(project.TaskDir);
 
             _logger.LogInformation("Starting streaming video generation for task {TaskId}", project.TaskId);
